@@ -1,0 +1,79 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          command_timeout: 10m
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # Clone or pull
+            if [ ! -d /var/www/lms-1seller ]; then
+              echo "Cloning repository..."
+              git clone https://github.com/vdovinurij05-glitch/lms-1seller.git /var/www/lms-1seller
+            fi
+
+            cd /var/www/lms-1seller || exit 1
+
+            echo "Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            echo "Code synced to: $(git rev-parse --short HEAD)"
+
+            echo "Installing dependencies..."
+            npm ci
+
+            echo "Generating Prisma client..."
+            npx prisma generate
+
+            echo "Running migrations..."
+            npx prisma migrate deploy
+
+            echo "Seeding database..."
+            npx tsx prisma/seed.ts || true
+
+            echo "Building application..."
+            rm -rf .next
+            npm run build
+
+            echo "Restarting application..."
+            pm2 delete lms-1seller 2>/dev/null || true
+            sleep 2
+            fuser -k 3100/tcp 2>/dev/null || true
+            sleep 1
+            pm2 start ecosystem.config.js
+            pm2 save
+
+            echo "Deployment completed!"
+            pm2 status
+            sleep 3
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:3100 || echo "App starting..."
+
+      - name: Notify status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed!"
+          fi

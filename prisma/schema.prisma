@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("EMPLOYEE") // ADMIN | EMPLOYEE
+  attempts  QuizAttempt[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  version     String   @default("1.0")
+  questions   Question[]
+  attempts    QuizAttempt[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  orderNum    Int
+  type        String   // SINGLE | MULTIPLE
+  category    String
+  text        String
+  explanation String?
+  options     QuestionOption[]
+  answers     Answer[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  orderNum   Int
+  text       String
+  isCorrect  Boolean  @default(false)
+  answers    AnswerOption[]
+}
+
+model QuizAttempt {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        String
+  course         Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  score          Float?
+  totalCorrect   Int?
+  totalQuestions  Int?
+  passed         Boolean?
+  currentQuestion Int      @default(0)
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  answers        Answer[]
+}
+
+model Answer {
+  id              String          @id @default(cuid())
+  attemptId       String
+  attempt         QuizAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  isCorrect       Boolean
+  selectedOptions AnswerOption[]
+}
+
+model AnswerOption {
+  id       String         @id @default(cuid())
+  answerId String
+  answer   Answer         @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  optionId String
+  option   QuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+}
