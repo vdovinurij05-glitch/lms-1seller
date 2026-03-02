@@ -23,26 +23,39 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           command_timeout: 10m
           script: |
+            set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-            # Clone or pull
+            # Clone repo (remove broken dir if exists)
+            if [ -d /var/www/lms-1seller ] && [ ! -d /var/www/lms-1seller/.git ]; then
+              echo "Removing broken directory..."
+              # Save .env and db if they exist
+              [ -f /var/www/lms-1seller/.env ] && cp /var/www/lms-1seller/.env /tmp/lms-env-backup
+              [ -f /var/www/lms-1seller/prisma/prod.db ] && cp /var/www/lms-1seller/prisma/prod.db /tmp/lms-db-backup
+              rm -rf /var/www/lms-1seller
+            fi
+
             if [ ! -d /var/www/lms-1seller ]; then
               echo "Cloning repository..."
               git clone https://github.com/vdovinurij05-glitch/lms-1seller.git /var/www/lms-1seller
             fi
 
-            cd /var/www/lms-1seller || exit 1
+            cd /var/www/lms-1seller
+
+            # Restore backups if they exist
+            [ -f /tmp/lms-env-backup ] && mv /tmp/lms-env-backup .env
+            [ -f /tmp/lms-db-backup ] && mkdir -p prisma && mv /tmp/lms-db-backup prisma/prod.db
 
             # Create .env if missing
             if [ ! -f .env ]; then
               echo "Creating .env file..."
               SECRET=$(openssl rand -hex 32)
-              cat > .env << EOF
+              cat > .env <<ENVEOF
             DATABASE_URL="file:./prisma/prod.db"
             NEXTAUTH_SECRET="$SECRET"
             NEXTAUTH_URL="https://learn.1seller.ru"
-            EOF
+            ENVEOF
               echo ".env created"
             fi
 
